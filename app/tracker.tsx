@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, Flame, Plus, Settings2, LockKeyhole, Utensils, Pencil, Trash2, LoaderCircle, Target, Apple, House, ChartNoAxesColumn, Beef, Wheat, Droplet, CalendarDays } from "lucide-react";
+import { ArrowLeft, ArrowRight, Flame, Plus, Settings, LockKeyhole, Utensils, Trash2, LoaderCircle, Target, House, ChartNoAxesColumn, Beef, Wheat, Droplet, CalendarDays, User, Check, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -10,6 +10,7 @@ import { emptyMeal, localDate, mealSchema, shiftDate, type Meal } from "@/lib/me
 import Composer from "./composer";
 import CameraCapture from "./camera-capture";
 import ProgressView from "./progress-view";
+import BrandLogo from "./brand-logo";
 import { api, jsonBody } from "@/lib/client";
 import { NativeSelect } from "@/components/ui/native-select";
 import { flushSync } from "react-dom";
@@ -88,7 +89,6 @@ export default function Tracker() {
   useEffect(() => { void api<Settings>("/api/settings").then(data => { setSettings(data); setGoalInput(data.calorieGoal?.toString() ?? ""); }).catch(e => setError(message(e))); }, []);
   const totals = meals.reduce((a, m) => ({ calories: a.calories + m.calories, protein: a.protein + (m.protein ?? 0), carbs: a.carbs + (m.carbs ?? 0), fat: a.fat + (m.fat ?? 0) }), { calories: 0, protein: 0, carbs: 0, fat: 0 });
   const goal = settings?.calorieGoal;
-  const progress = goal ? Math.min(totals.calories / goal, 1) : 0;
   const dayTitle = date === localDate() ? "Today" : date ? new Date(date + "T12:00:00").toLocaleDateString(undefined, { month: "long", day: "numeric" }) : "Your journal";
   function openMeal(meal?: Meal) { setAddOpen(false); setFormError(""); setDraft(meal ? { ...meal } : emptyMeal(date)); }
   async function save(meal: Meal) {
@@ -128,10 +128,18 @@ export default function Tracker() {
   const macroEnergy = totals.protein * 4 + totals.carbs * 4 + totals.fat * 9;
   const calendarStart = date ? shiftDate(date, -new Date(date + "T12:00:00").getDay()) : "";
   const unavailable = loading || Boolean(error);
+  const remaining = goal ? Math.max(0, goal - totals.calories) : totals.calories;
+  const remainingShare = goal ? Math.max(0, 1 - totals.calories / goal) : 0;
+  const remainingPct = goal ? Math.round(remainingShare * 100) : null;
+  const overGoal = Boolean(goal && totals.calories > goal && !unavailable);
+  const onTrack = Boolean(goal && !unavailable && totals.calories <= goal);
   return <main className="cal-shell">
     <header className="cal-header">
-      <h1 className="cal-brand">{view === "home" ? <><Apple size={29} fill="currentColor" strokeWidth={1.7} />My Diet</> : view === "progress" ? "Progress" : "Settings"}</h1>
-      <span className="meal-count-badge" title="Meals logged on this day"><Flame size={17} fill="#ffb05c" stroke="#e77826" /><span>{unavailable ? "—" : meals.length}</span><span className="sr-only"> meals logged</span></span>
+      <h1 className="cal-brand">{view === "home" ? <><BrandLogo size={30} zoom={1.18} />My Diet</> : view === "progress" ? "Progress" : "Settings"}</h1>
+      <div className="header-actions">
+        <span className="meal-count-badge" title="Meals logged on this day"><Flame size={17} fill="#ffb05c" stroke="#e77826" /><span>{unavailable ? "—" : meals.length}</span><span className="sr-only"> meals logged</span></span>
+        <button className="profile-chip" aria-label="Open settings" onClick={openSettings}><User size={18}/></button>
+      </div>
     </header>
     {view === "home" && <><div className="month-row"><button onClick={() => setCalendarOpen(true)} className="calendar-link"><span>{date ? new Date(date + "T12:00:00").toLocaleDateString(undefined, { month: "long", year: "numeric" }) : "Your journal"}</span><CalendarDays size={14}/></button><span className="privacy-label"><LockKeyhole size={12}/> Only you</span></div>
     <div className="calendar-strip" aria-label="Choose a day">
@@ -144,22 +152,32 @@ export default function Tracker() {
       <TabsContent value="home">
         <section className="nutrition-summary" aria-label={dayTitle + " nutrition"}>
           <div className="calorie-card">
-            <div><div className="calorie-number">{unavailable ? "—" : fmt(goal ? Math.max(0, goal - totals.calories) : totals.calories)}</div><p className="summary-label">{goal ? "Calories left" : "Calories logged"}</p>
-              {goal && totals.calories > goal && !unavailable && <p className="summary-foot">{fmt(totals.calories - goal)} over your goal</p>}
-              {!goal && <button className="goal-link" onClick={openSettings}>Set daily goal</button>}
+            <div className="calorie-copy">
+              <p className="summary-label">{goal ? "Calories left" : "Calories logged"}</p>
+              <div className="calorie-number">{unavailable ? "—" : fmt(remaining)}</div>
+              {goal ? <p className="summary-foot">of {fmt(goal)} calories</p> : <button className="goal-link" onClick={openSettings}>Set daily goal</button>}
+              {onTrack && <span className="on-track"><Check size={14} strokeWidth={2.5}/> You’re on track</span>}
+              {overGoal && <p className="summary-over">{fmt(totals.calories - (goal || 0))} over your goal</p>}
             </div>
-            <NutritionRing progress={unavailable ? 0 : progress} className="calorie-ring"><Flame size={23} fill="currentColor" /></NutritionRing>
+            <div className="calorie-visual">
+              <NutritionRing progress={unavailable || !goal ? 0 : remainingShare} className="calorie-ring"><Flame size={20} /></NutritionRing>
+              {goal && !unavailable && <p className="ring-caption">{overGoal ? "Over goal" : remainingPct + "% left"}</p>}
+            </div>
           </div>
           <div className="macro-cards">
-            {([{ key: "protein", label: "Protein", Icon: Beef, factor: 4 }, { key: "carbs", label: "Carbs", Icon: Wheat, factor: 4 }, { key: "fat", label: "Fat", Icon: Droplet, factor: 9 }] as const).map(({key,label,Icon,factor}) => <div className={"macro-card " + key} key={key}>
-              <strong>{unavailable ? "—" : fmt(totals[key])}<span>g</span></strong><p>{label} logged</p>
-              <NutritionRing progress={unavailable || !macroEnergy ? 0 : totals[key] * factor / macroEnergy} className="macro-ring"><Icon size={17} /></NutritionRing>
-            </div>)}
+            {([{ key: "protein", label: "Protein", Icon: Beef, factor: 4 }, { key: "carbs", label: "Carbs", Icon: Wheat, factor: 4 }, { key: "fat", label: "Fat", Icon: Droplet, factor: 9 }] as const).map(({key,label,Icon,factor}) => {
+              const share = !unavailable && macroEnergy ? totals[key] * factor / macroEnergy : 0;
+              return <div className={"macro-card " + key} key={key}>
+                <strong>{unavailable ? "—" : fmt(totals[key])}<span>g</span></strong><p>{label} logged</p>
+                <NutritionRing progress={share} className="macro-ring"><Icon size={17} /></NutritionRing>
+                <small>{unavailable || !macroEnergy ? "—" : Math.round(share * 100) + "% of calories"}</small>
+              </div>;
+            })}
           </div>
           <p className="macro-caption">{meals.some(m => m.protein === null || m.carbs === null || m.fat === null) ? "Some macro values are missing · Rings show recorded calorie share" : "Macro rings show each nutrient’s calorie share"}</p>
         </section>
         <section className="meals-panel">
-          <div className="section-heading"><h2>Recently logged</h2><span className="muted">{dayTitle}</span></div>
+          <div className="section-heading"><h2>Recently logged</h2><button className="day-jump" onClick={() => setCalendarOpen(true)}>{dayTitle} <ChevronRight size={16}/></button></div>
           {loading ? <div className="empty-meals"><LoaderCircle className="animate-spin" aria-label="Loading meals"/></div> : error ? <div className="empty-meals"><p>Your meals couldn’t load. Try again above.</p></div> : meals.length === 0 ? <div className="empty-meals"><span className="empty-icon"><Utensils size={25}/></span><h3>Your day starts here</h3><p>Tap + to add your first meal.</p><Button variant="outline" onClick={openCamera}><Plus/> Add a meal</Button></div> : <div className="meal-list">{meals.map(meal => <article className="meal-row" key={meal.id}>
             <button className="meal-photo-button" aria-label={"Edit " + meal.title} onClick={() => openMeal(meal)}>{meal.imageKey ? <img className="meal-photo" src={"/api/photos?key=" + encodeURIComponent(meal.imageKey)} alt={meal.title} loading="lazy"/> : <span className="meal-photo meal-placeholder"><Utensils size={25}/></span>}</button>
             <div className="meal-info"><div className="meal-title-line"><button onClick={() => openMeal(meal)} title={meal.title}>{meal.title}</button><span className="meal-time">{meal.createdAt ? new Date(meal.createdAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }) : meal.mealType}</span></div>
@@ -172,7 +190,7 @@ export default function Tracker() {
       </TabsContent>
       <TabsContent value="progress"><ProgressView date={date} week={week} goal={goal} unavailable={unavailable} onDay={day => { setDate(day); setView("home"); }}/></TabsContent>
       <TabsContent value="settings">
-        <section className="settings-intro"><span className="settings-avatar"><Apple size={30} fill="currentColor"/></span><div><h2>My Diet</h2><p>Your personal food journal</p></div><LockKeyhole size={18}/></section>
+        <section className="settings-intro"><span className="settings-avatar"><BrandLogo size={48} zoom={1.18} /></span><div><h2>My Diet</h2><p>Your personal food journal</p></div><LockKeyhole size={18}/></section>
         <section className="settings-section"><h2>Daily target</h2><form className="settings-card meal-form" onSubmit={saveGoal}><div className="settings-card-title"><Target size={20}/><span>Calorie goal</span></div><div className="goal-input-wrap"><Input aria-label="Daily calorie goal" type="number" min={1} max={20000} step={1} value={goalInput} placeholder="No target" disabled={!settings || busy} onChange={e => { setGoalInput(e.target.value); setNotice(""); }}/><span>kcal / day</span></div><p className="muted text-sm">Use your own target, or leave it empty to just track.</p>{formError && <p role="alert" className="text-destructive">{formError}</p>}{notice && <p role="status" className="saved-note">{notice}</p>}<Button disabled={busy || !settings}>{busy ? "Saving…" : "Save goal"}</Button></form></section>
         <section className="settings-section"><h2>Meal recognition</h2><div className="settings-card"><div className="settings-card-title"><Flame size={20}/><span>AI estimates</span><span className="connection-badge">{settings === null ? "Loading" : settings.aiReady ? "Connected" : "Not connected"}</span></div><p>{settings?.aiReady ? "Photos, text, and voice are ready. Review your estimate before saving." : "Connect your API key later for automatic estimates. Photos and manual logging work now."}</p></div></section>
         <section className="settings-section"><h2>Your journal</h2><div className="settings-card"><div className="settings-card-title"><LockKeyhole size={20}/><span>Private, just for you</span></div><p>Meals and photos are saved to your private Site and available when you sign in.</p><a className="settings-gallery" href="/gallery">Image gallery <ArrowRight size={17}/></a></div></section>
@@ -180,9 +198,9 @@ export default function Tracker() {
       </TabsContent>
       <div className="bottom-dock">
         <div className="nav-pill">
-          <TabsList aria-label="Journal views"><TabsTrigger value="home"><House/><span>Home</span></TabsTrigger><TabsTrigger value="progress"><ChartNoAxesColumn/><span>Progress</span></TabsTrigger><TabsTrigger value="settings"><Settings2/><span>Settings</span></TabsTrigger></TabsList>
+          <TabsList aria-label="Journal views"><TabsTrigger value="home"><House/><span>Home</span></TabsTrigger><TabsTrigger value="progress"><ChartNoAxesColumn/><span>Progress</span></TabsTrigger><TabsTrigger value="settings"><Settings/><span>Settings</span></TabsTrigger></TabsList>
         </div>
-        <Button className="floating-add" size="icon" aria-label="Add a meal" disabled={!date} onClick={openCamera}><Plus size={30}/></Button>
+        <Button className="floating-add" size="icon" aria-label="Add a meal" disabled={!date} onClick={openCamera}><Plus size={30} strokeWidth={2.4}/></Button>
       </div>
     </Tabs>
     <Dialog open={addOpen} onOpenChange={setAddOpen}><DialogContent className={captureMode === "camera" ? "camera-dialog" : "add-meal-dialog max-h-[90svh] overflow-y-auto"} onOpenAutoFocus={e => { if(captureMode === "camera") e.preventDefault(); }}><DialogHeader className="sr-only"><DialogTitle>{captureMode === "camera" ? "Scan your food" : "Add a meal"}</DialogTitle><DialogDescription>Take a photo, record your meal, or enter calories manually.</DialogDescription></DialogHeader>{captureMode === "camera" ? <CameraCapture onClose={() => setAddOpen(false)} onPhoto={file => { setCapturedPhoto(file); setCaptureMode("photo"); }} onVoice={() => setCaptureMode("voice")} onManual={() => openMeal()}/> : <><button className="back-to-camera" onClick={() => { setCapturedPhoto(null); setCaptureMode("camera"); }}><ArrowLeft size={16}/> Camera</button><Composer date={date} aiReady={settings?.aiReady ?? null} onReview={openMeal} resetKey={composerReset} initialPhoto={capturedPhoto} voiceFirst={captureMode === "voice"}/></>}</DialogContent></Dialog>
@@ -205,5 +223,8 @@ export default function Tracker() {
 }
 
 function NutritionRing({ progress, children, className }: { progress: number; children: React.ReactNode; className: string }) {
-  return <div className={"nutrition-ring " + className} aria-hidden="true"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="42" fill="none" className="ring-track" strokeWidth="6"/><circle cx="50" cy="50" r="42" fill="none" stroke="currentColor" strokeWidth="6" strokeLinecap="round" strokeDasharray={264} strokeDashoffset={264 * (1 - Math.max(0, Math.min(1, progress)))} transform="rotate(-90 50 50)"/></svg><span className="ring-icon">{children}</span></div>;
+  const thick = className.includes("calorie-ring");
+  const r = thick ? 40 : 42;
+  const c = 2 * Math.PI * r;
+  return <div className={"nutrition-ring " + className} aria-hidden="true"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r={r} fill="none" className="ring-track" strokeWidth={thick ? 10 : 6}/><circle cx="50" cy="50" r={r} fill="none" stroke="currentColor" strokeWidth={thick ? 10 : 6} strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - Math.max(0, Math.min(1, progress)))} transform="rotate(-90 50 50)"/></svg><span className="ring-icon">{children}</span></div>;
 }

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ImageIcon, ImagePlus, LoaderCircle, UploadCloud } from "lucide-react";
+import BrandLogo from "../brand-logo";
 import { Button } from "@/components/ui/button";
 
 type GalleryImage = {
@@ -154,9 +155,7 @@ export default function Home() {
       <div className="mx-auto w-full max-w-[1500px] px-5 pb-16 pt-5 sm:px-8 lg:px-12">
         <header className="flex items-center justify-between border-b border-border pb-5">
           <div className="flex items-center gap-3">
-            <span className="grid size-10 place-items-center rounded-full bg-primary text-primary-foreground">
-              <ImagePlus className="size-5" aria-hidden="true" />
-            </span>
+            <BrandLogo size={40} />
             <a href="/" className="text-base font-semibold tracking-tight">My Diet</a><span className="text-sm text-muted-foreground">/ Image gallery</span>
           </div>
 

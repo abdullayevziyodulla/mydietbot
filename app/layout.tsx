@@ -5,8 +5,9 @@ export const metadata: Metadata = {
   title: "My Diet — Personal food journal",
   description: "Your private food journal. Log meals, review estimates, and track daily calories and macros.",
   icons: {
-    icon: "/favicon.svg",
-    shortcut: "/favicon.svg",
+    icon: "/favicon.png",
+    shortcut: "/favicon.png",
+    apple: "/logo.png",
   },
 };
 

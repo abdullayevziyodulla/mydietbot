@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { identify, boundedBytes, failure } from "@/lib/server";
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = new Set([
@@ -24,8 +25,9 @@ function getBucket(): R2Bucket {
   return env.BUCKET;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    await identify(request);
     const result = await getBucket().list({
       prefix: "gallery/",
       limit: 1000,
@@ -46,8 +48,7 @@ export async function GET() {
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
-    console.error(JSON.stringify({ event: "gallery_list_failed", error: String(error) }));
-    return Response.json({ error: "Couldn’t load your gallery." }, { status: 503 });
+    return failure(error);
   }
 }
 
@@ -58,7 +59,9 @@ export async function POST(request: Request) {
   }
 
   try {
-    const formData = await request.formData();
+    await identify(request);
+    const bytes = await boundedBytes(request.body, MAX_IMAGE_BYTES + 1024 * 1024);
+    const formData = await new Response(bytes, { headers: { "Content-Type": request.headers.get("content-type") || "" } }).formData();
     const image = formData.get("image");
     if (!(image instanceof File) || !ALLOWED_IMAGE_TYPES.has(image.type)) {
       return Response.json({ error: "Choose a JPG, PNG, WebP, GIF, or AVIF image." }, { status: 400 });
@@ -91,7 +94,6 @@ export async function POST(request: Request) {
       },
     });
   } catch (error) {
-    console.error(JSON.stringify({ event: "gallery_upload_failed", error: String(error) }));
-    return Response.json({ error: "Couldn’t add that image. Try again." }, { status: 503 });
+    return failure(error);
   }
 }

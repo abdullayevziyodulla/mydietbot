@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { identify, failure } from "@/lib/server";
 
 export async function GET(request: Request) {
   const key = new URL(request.url).searchParams.get("key");
@@ -7,6 +8,7 @@ export async function GET(request: Request) {
   }
 
   try {
+    await identify(request);
     if (!env.BUCKET) throw new Error("Image storage is unavailable.");
     const object = await env.BUCKET.get(key);
     if (!object) return new Response("Image not found", { status: 404 });
@@ -21,7 +23,6 @@ export async function GET(request: Request) {
 
     return new Response(object.body, { headers });
   } catch (error) {
-    console.error(JSON.stringify({ event: "gallery_image_failed", error: String(error) }));
-    return new Response("Image unavailable", { status: 503 });
+    return failure(error);
   }
 }

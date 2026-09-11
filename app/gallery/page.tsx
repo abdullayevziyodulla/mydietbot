@@ -157,7 +157,7 @@ export default function Home() {
             <span className="grid size-10 place-items-center rounded-full bg-primary text-primary-foreground">
               <ImagePlus className="size-5" aria-hidden="true" />
             </span>
-            <a href="/" className="text-base font-semibold tracking-tight">My Cal</a><span className="text-sm text-muted-foreground">/ Image gallery</span>
+            <a href="/" className="text-base font-semibold tracking-tight">My Diet</a><span className="text-sm text-muted-foreground">/ Image gallery</span>
           </div>
 
           <input

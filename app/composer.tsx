@@ -7,7 +7,7 @@ import { emptyMeal, type Meal } from "@/lib/meals";
 import { api, jsonBody } from "@/lib/client";
 
 type Estimate = { status: "ready" | "needs_details" | "not_food"; title: string; portion: string; calories: number | null; protein: number | null; carbs: number | null; fat: number | null; notes: string; question: string; confidence: string };
-export default function Composer({ date, aiReady, onReview, resetKey }: { date: string; aiReady: boolean | null; onReview: (meal: Meal) => void; resetKey: number }) {
+export default function Composer({ date, aiReady, onReview, resetKey, initialPhoto, voiceFirst = false }: { date: string; aiReady: boolean | null; onReview: (meal: Meal) => void; resetKey: number; initialPhoto?: File | null; voiceFirst?: boolean }) {
   const [text, setText] = useState("");
   const [photo, setPhoto] = useState<{ key: string; url: string } | null>(null);
   const [audio, setAudio] = useState<File | null>(null);
@@ -23,9 +23,16 @@ export default function Composer({ date, aiReady, onReview, resetKey }: { date: 
   const streamRef = useRef<MediaStream | null>(null);
   const recordTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mounted = useRef(true);
+  const initialStarted = useRef(false);
   const locked = Boolean(busy) || recording;
 
   useEffect(() => { setText(""); setPhoto(null); setAudio(null); setQuestion(""); setError(""); }, [resetKey]);
+  useEffect(() => {
+    if (initialStarted.current || aiReady === null) return;
+    initialStarted.current = true;
+    if (initialPhoto) void uploadPhoto(initialPhoto, true);
+    else if (voiceFirst) void startRecording();
+  }, [initialPhoto, voiceFirst, aiReady]);
   useEffect(() => {
     if (!audio) { setAudioUrl(""); return; }
     const url = URL.createObjectURL(audio); setAudioUrl(url);
@@ -42,7 +49,7 @@ export default function Composer({ date, aiReady, onReview, resetKey }: { date: 
   }, [recording]);
   const report = (e: unknown) => setError(e instanceof Error ? e.message : "Something went wrong. Please try again.");
 
-  async function uploadPhoto(file: File) {
+  async function uploadPhoto(file: File, autoReview = false) {
     if (locked) return; setBusy("Preparing photo…"); setError(""); setQuestion("");
     try {
       if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) throw new Error("Use a JPG, PNG or WebP photo. Convert HEIC photos to JPG first.");
@@ -59,7 +66,10 @@ export default function Composer({ date, aiReady, onReview, resetKey }: { date: 
       } finally { bitmap.close(); }
       if (blob.size > 4 * 1024 * 1024) throw new Error("This photo is too large after processing. Try a smaller image.");
       setBusy("Saving photo…");
-      setPhoto(await api<{ key: string; url: string }>("/api/photos", { method: "POST", headers: { "Content-Type": blob.type }, body: blob }));
+      const savedPhoto = await api<{ key: string; url: string }>("/api/photos", { method: "POST", headers: { "Content-Type": blob.type }, body: blob });
+      setPhoto(savedPhoto);
+      if (autoReview && aiReady) await estimatePhoto(savedPhoto.key);
+      else if (autoReview && aiReady === false) setQuestion("Photo saved. Enter your calories below; AI estimates will be available once your key is connected.");
     } catch (e) { report(e); } finally { setBusy(""); if (photoInput.current) photoInput.current.value = ""; }
   }
   function chooseAudio(file: File) {
@@ -76,6 +86,7 @@ export default function Composer({ date, aiReady, onReview, resetKey }: { date: 
     try {
       if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") throw new Error("Recording isn’t available here. Upload a voice note instead.");
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true }); streamRef.current = stream;
+      if (!mounted.current) { stream.getTracks().forEach(t => t.stop()); return; }
       const type = ["audio/webm;codecs=opus", "audio/mp4", "audio/webm"].find(t => MediaRecorder.isTypeSupported(t));
       if (!type) { stream.getTracks().forEach(t => t.stop()); throw new Error("This browser’s recording format isn’t supported. Upload a voice note instead."); }
       const rec = new MediaRecorder(stream, { mimeType: type }); recorder.current = rec;
@@ -104,14 +115,18 @@ export default function Composer({ date, aiReady, onReview, resetKey }: { date: 
   }
   async function estimate() {
     if (!aiReady || locked) return; setBusy("Estimating your meal…"); setError(""); setQuestion("");
+    await estimatePhoto(photo?.key ?? null);
+  }
+  async function estimatePhoto(imageKey: string | null) {
+    setBusy("Estimating your meal…"); setError(""); setQuestion("");
     try {
-      const { estimate } = await api<{ estimate: Estimate }>("/api/estimate", jsonBody({ text, imageKey: photo?.key ?? null }));
+      const { estimate } = await api<{ estimate: Estimate }>("/api/estimate", jsonBody({ text, imageKey }));
       if (estimate.status !== "ready" || estimate.calories === null) { setQuestion(estimate.question || "Please add more meal and portion details."); return; }
-      onReview({ ...emptyMeal(date), title: estimate.title, portion: estimate.portion, calories: estimate.calories, protein: estimate.protein, carbs: estimate.carbs, fat: estimate.fat, notes: "Confidence: " + estimate.confidence + ". " + estimate.notes, imageKey: photo?.key ?? null, source: "ai" });
+      if (mounted.current) onReview({ ...emptyMeal(date), title: estimate.title, portion: estimate.portion, calories: estimate.calories, protein: estimate.protein, carbs: estimate.carbs, fat: estimate.fat, notes: "Confidence: " + estimate.confidence + ". " + estimate.notes, imageKey, source: "ai" });
     } catch (e) { report(e); } finally { setBusy(""); }
   }
   return <aside className="composer-panel">
-    <p className="eyebrow">QUICK LOG</p><h2>What’s on your plate?</h2><p className="muted">Photo, a few words, or a voice note.</p>
+    <p className="eyebrow">MY DIET</p><h2>{initialPhoto ? "Your meal" : "What did you eat?"}</h2><p className="muted">{initialPhoto ? "Add any portions, oils, or sauces." : "Say it or type it. Include portions if you can."}</p>
     <div className={"meal-composer " + (dragging ? "dragging" : "")} onDragOver={e => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={e => { e.preventDefault(); setDragging(false); if (e.dataTransfer.files[0]) void uploadPhoto(e.dataTransfer.files[0]); }}>
       {photo && <div className="attached-photo"><img src={photo.url} alt="Attached meal photo" /><Button size="icon" variant="secondary" aria-label="Detach photo" disabled={locked} onClick={() => setPhoto(null)}><X /></Button></div>}
       <Textarea aria-label="Describe your meal" value={text} maxLength={4000} disabled={locked} placeholder={"e.g. Two eggs, a slice of toast,\nand coffee with milk…"} onChange={e => setText(e.target.value)} onPaste={e => { const file = Array.from(e.clipboardData.items).find(i => i.type.startsWith("image/"))?.getAsFile(); if (file) { e.preventDefault(); void uploadPhoto(file); } }} rows={4} />

@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ImageIcon, ImagePlus, LoaderCircle, UploadCloud } from "lucide-react";
+import { ImageIcon, ImagePlus, LoaderCircle, Trash2, UploadCloud } from "lucide-react";
 import BrandLogo from "../brand-logo";
 import { Button } from "@/components/ui/button";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
 type GalleryImage = {
   key: string;
@@ -56,6 +57,8 @@ export default function Home() {
   const [images, setImages] = useState<GalleryImage[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<GalleryImage | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
 
@@ -150,6 +153,27 @@ export default function Home() {
     }
   }
 
+  async function deleteImage() {
+    if (!deleteTarget || deleting) return;
+    setDeleting(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/images?key=${encodeURIComponent(deleteTarget.key)}`, { method: "DELETE" });
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(body?.error ?? "Couldn’t delete the image.");
+      }
+      setImages(current => current.filter(image => image.key !== deleteTarget.key));
+      setStatus("Image deleted");
+      setDeleteTarget(null);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Couldn’t delete the image.");
+      setDeleteTarget(null);
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <main className="min-h-svh bg-background text-foreground">
       <div className="mx-auto w-full max-w-[1500px] px-5 pb-16 pt-5 sm:px-8 lg:px-12">
@@ -199,25 +223,27 @@ export default function Home() {
             ) : images.length ? (
               <div className="columns-1 gap-4 sm:columns-2 xl:columns-3" aria-label="Image gallery">
                 {images.map((image, index) => (
-                  <a
+                  <div
                     key={image.key}
-                    href={image.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="group mb-4 block break-inside-avoid overflow-hidden rounded-[1.35rem] bg-card shadow-[0_16px_50px_rgba(20,20,22,0.08)] outline-none ring-primary transition hover:-translate-y-0.5 focus-visible:ring-4"
+                    className="group mb-4 break-inside-avoid overflow-hidden rounded-[1.35rem] bg-card shadow-[0_16px_50px_rgba(20,20,22,0.08)] transition hover:-translate-y-0.5"
                   >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={image.url}
-                      alt={image.name}
-                      className="h-auto w-full bg-muted object-cover transition duration-500 group-hover:scale-[1.015]"
-                      loading={index < 4 ? "eager" : "lazy"}
-                    />
-                    <span className="flex items-center gap-2 px-4 py-3 text-sm text-muted-foreground">
-                      <ImageIcon className="size-4" aria-hidden="true" />
-                      <span className="truncate">{image.name}</span>
-                    </span>
-                  </a>
+                    <a href={image.url} target="_blank" rel="noreferrer" className="block outline-none ring-primary focus-visible:ring-4" aria-label={`Open ${image.name}`}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={image.url}
+                        alt={image.name}
+                        className="h-auto w-full bg-muted object-cover transition duration-500 group-hover:scale-[1.015]"
+                        loading={index < 4 ? "eager" : "lazy"}
+                      />
+                    </a>
+                    <div className="flex items-center gap-2 px-4 py-2 text-sm text-muted-foreground">
+                      <ImageIcon className="size-4 shrink-0" aria-hidden="true" />
+                      <span className="min-w-0 flex-1 truncate">{image.name}</span>
+                      <Button type="button" variant="ghost" size="icon" className="shrink-0" aria-label={`Delete ${image.name}`} onClick={() => { setStatus(""); setDeleteTarget(image); }}>
+                        <Trash2 className="size-4" aria-hidden="true" />
+                      </Button>
+                    </div>
+                  </div>
                 ))}
               </div>
             ) : (
@@ -245,6 +271,20 @@ export default function Home() {
           </div>
         </section>
       </div>
+      <AlertDialog open={deleteTarget !== null} onOpenChange={open => { if (!open && !deleting) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this image?</AlertDialogTitle>
+            <AlertDialogDescription>{deleteTarget?.name} will be permanently removed from your gallery.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Keep image</AlertDialogCancel>
+            <AlertDialogAction disabled={deleting} onClick={event => { event.preventDefault(); void deleteImage(); }}>
+              {deleting ? "Deleting…" : "Delete image"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </main>
   );
 }

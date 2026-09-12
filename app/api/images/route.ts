@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { identify, boundedBytes, failure } from "@/lib/server";
+import { AppError, identify, boundedBytes, failure } from "@/lib/server";
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = new Set([
@@ -93,6 +93,22 @@ export async function POST(request: Request) {
         url: `/api/image?key=${encodeURIComponent(key)}`,
       },
     });
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    await identify(request);
+    const key = new URL(request.url).searchParams.get("key");
+    if (!key?.startsWith("gallery/") || key.length <= "gallery/".length) {
+      throw new AppError("Image not found.", 404);
+    }
+    const bucket = getBucket();
+    if (!await bucket.head(key)) throw new AppError("Image not found.", 404);
+    await bucket.delete(key);
+    return Response.json({ deleted: true }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     return failure(error);
   }

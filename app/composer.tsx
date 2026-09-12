@@ -119,9 +119,12 @@ export default function Composer({ date, aiReady, onReview, resetKey, initialPho
   async function estimatePhoto(imageKey: string | null) {
     setBusy("Estimating your meal…"); setError(""); setQuestion("");
     try {
-      const { estimate } = await api<{ estimate: Estimate }>("/api/estimate", jsonBody({ text, imageKey }));
-      if (estimate.status !== "ready" || estimate.calories === null) { setQuestion(estimate.question || "Please add more meal and portion details."); return; }
-      if (mounted.current) onReview({ ...emptyMeal(date), title: estimate.title, portion: estimate.portion, calories: estimate.calories, protein: estimate.protein, carbs: estimate.carbs, fat: estimate.fat, notes: "Confidence: " + estimate.confidence + ". " + estimate.notes, imageKey, source: "ai" });
+      const { estimate, searched, sources } = await api<{ estimate: Estimate; searched?: boolean; sources?: { url: string; title: string }[] }>("/api/estimate", jsonBody({ text, imageKey }));
+      if (estimate.status !== "ready" || estimate.calories === null) { setQuestion((searched ? "I searched online. " : "") + (estimate.question || "Please add more meal and portion details.")); return; }
+      const searchSources = sources ?? [];
+      const sourceLine = searchSources[0] ? "\nSearch result: " + searchSources[0].url : "";
+      const notes = ("Confidence: " + estimate.confidence + ". " + (searched ? "Web search used; nutrition may still be estimated. " : "") + estimate.notes).slice(0, 2500 - sourceLine.length) + sourceLine;
+      if (mounted.current) onReview({ ...emptyMeal(date), title: estimate.title, portion: estimate.portion, calories: estimate.calories, protein: estimate.protein, carbs: estimate.carbs, fat: estimate.fat, notes, imageKey, source: "ai", searched, searchSources });
     } catch (e) { report(e); } finally { setBusy(""); }
   }
   return <aside className="composer-panel">

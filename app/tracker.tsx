@@ -60,10 +60,16 @@ export default function Tracker() {
   const totals = meals.reduce((a, m) => ({ calories: a.calories + m.calories, protein: a.protein + (m.protein ?? 0), carbs: a.carbs + (m.carbs ?? 0), fat: a.fat + (m.fat ?? 0) }), { calories: 0, protein: 0, carbs: 0, fat: 0 });
   const goal = settings?.calorieGoal;
   const dayTitle = date === localDate() ? "Today" : date ? new Date(date + "T12:00:00").toLocaleDateString(undefined, { month: "long", day: "numeric" }) : "Your journal";
-  function openMeal(meal: Meal) { setAddOpen(false); setFormError(""); setCorrection(""); setDraft({ ...meal }); }
+  function openMeal(meal: Meal) {
+    setAddOpen(false); setFormError(""); setCorrection("");
+    const sourceUrl = meal.notes.match(/\nSearch result: (https?:\/\/\S+)/)?.[1];
+    let savedSource: { url: string; title: string } | null = null;
+    if (sourceUrl) try { const url = new URL(sourceUrl); savedSource = { url: url.href, title: url.hostname }; } catch { /* Keep older notes as plain text. */ }
+    setDraft({ ...meal, searched: meal.searched ?? meal.notes.includes("Web search used;"), searchSources: meal.searchSources ?? (savedSource ? [savedSource] : []) });
+  }
   async function save(meal: Meal) {
-    mealSchema.parse(meal);
-    await api("/api/meals", jsonBody(meal));
+    const savedMeal = mealSchema.parse(meal);
+    await api("/api/meals", jsonBody(savedMeal));
     if (!meal.createdAt) setComposerReset(n => n + 1);
     setDraft(null); setView("home"); setNotice("Meal saved.");
     if (date !== meal.date) setDate(meal.date); else await reload(meal.date);
@@ -77,10 +83,13 @@ export default function Tracker() {
     if (!draft || !correction.trim() || busy) return;
     setBusy(true); setFormError("");
     try {
-      const result = await api<{ estimate: { status: string; title: string; portion: string; calories: number | null; protein: number | null; carbs: number | null; fat: number | null; notes: string; confidence: string; question: string } }>("/api/estimate", jsonBody({ text: `Meal: ${draft.title}. Estimated portion: ${draft.portion}. My correction: ${correction.trim()}`, imageKey: draft.imageKey }));
+      const result = await api<{ estimate: { status: string; title: string; portion: string; calories: number | null; protein: number | null; carbs: number | null; fat: number | null; notes: string; confidence: string; question: string }; searched?: boolean; sources?: { url: string; title: string }[] }>("/api/estimate", jsonBody({ text: `Meal: ${draft.title}. Estimated portion: ${draft.portion}. My correction: ${correction.trim()}`, imageKey: draft.imageKey, search: Boolean(draft.searched) }));
       const estimate = result.estimate;
       if (estimate.status !== "ready" || estimate.calories === null) { setFormError(estimate.question || "Add more details about the meal and try again."); return; }
-      setDraft({ ...draft, title: estimate.title, portion: estimate.portion, calories: estimate.calories, protein: estimate.protein, carbs: estimate.carbs, fat: estimate.fat, notes: `Confidence: ${estimate.confidence}. ${estimate.notes}`, source: "ai" });
+      const searchSources = result.sources ?? [];
+      const sourceLine = searchSources[0] ? "\nSearch result: " + searchSources[0].url : "";
+      const notes = (`Confidence: ${estimate.confidence}. ${result.searched ? "Web search used; nutrition may still be estimated. " : ""}${estimate.notes}`).slice(0, 2500 - sourceLine.length) + sourceLine;
+      setDraft({ ...draft, title: estimate.title, portion: estimate.portion, calories: estimate.calories, protein: estimate.protein, carbs: estimate.carbs, fat: estimate.fat, notes, source: "ai", searched: result.searched, searchSources });
       setCorrection("");
     } catch (e) { setFormError(message(e)); } finally { setBusy(false); }
   }
@@ -195,6 +204,7 @@ export default function Tracker() {
         <div className="review-detail"><span>Estimated portion</span><strong>{draft.portion || "Portion not specified"}</strong></div>
         <div className="portion-buttons"><span>Scale amounts</span>{[0.5, 1.5, 2].map(factor => <Button key={factor} type="button" variant="outline" size="sm" onClick={() => scaleDraft(factor)}>×{factor}</Button>)}</div>
         <div className="estimate-review" aria-label="Estimated nutrition"><div className="estimate-review-main"><Flame size={20}/><strong>{fmt(draft.calories)} calories</strong></div><div className="estimate-review-macros"><span>Protein <strong>{draft.protein ?? "—"} g</strong></span><span>Carbs <strong>{draft.carbs ?? "—"} g</strong></span><span>Fat <strong>{draft.fat ?? "—"} g</strong></span></div></div>
+        {draft.searched && <div className="review-sources"><span>Looked up online · nutrition is an estimate unless published for this serving</span>{draft.searchSources?.map(source => <a key={source.url} href={source.url} target="_blank" rel="noopener noreferrer">{source.title} <ArrowRight size={14}/></a>)}</div>}
         <div className="estimate-correction"><label htmlFor="meal-correction">Need to correct the estimate?</label><Textarea id="meal-correction" maxLength={1000} rows={2} value={correction} onChange={e => setCorrection(e.target.value)} placeholder="e.g. It was two slices, and I added butter"/><Button type="button" variant="outline" disabled={busy || !correction.trim()} onClick={() => void reestimateDraft()}>{busy ? "Updating…" : "Update estimate"}</Button>{correction.trim() && <p className="muted text-sm">Update the estimate before saving this correction.</p>}</div>
         <label>Notes & assumptions<Textarea maxLength={2500} rows={3} value={draft.notes} onChange={e => setDraft({ ...draft, notes: e.target.value })} placeholder="Ingredients, cooking oil, or details to remember" /></label>
         {formError && <p role="alert" className="text-destructive">{formError}</p>}

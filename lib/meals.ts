@@ -10,7 +10,7 @@ export const mealSchema = z.object({
   calories: z.number().finite().min(0).max(20000), protein: macro, carbs: macro, fat: macro,
   notes: z.string().max(2500), source: z.enum(["manual", "ai"]), imageKey: z.string().max(250).nullable(),
 });
-export type Meal = z.infer<typeof mealSchema> & { createdAt?: string };
+export type Meal = z.infer<typeof mealSchema> & { createdAt?: string; searched?: boolean; searchSources?: { url: string; title: string }[] };
 export function localDate(d = new Date()) {
   return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, "0"), String(d.getDate()).padStart(2, "0")].join("-");
 }

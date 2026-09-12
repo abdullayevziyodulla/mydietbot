@@ -5,7 +5,8 @@ export async function GET(request: Request) {
   try {
     const user = await identify(request);
     const settings = await database().prepare("SELECT calorie_goal AS calorieGoal FROM settings WHERE user_id = ?").bind(user).first();
-    return json({ calorieGoal: settings?.calorieGoal ?? null, aiReady: Boolean(env.OPENAI_API_KEY), models: { photo: "gpt-4.1-mini", text: "gpt-4o-mini", audio: "gpt-4o-mini-transcribe" } });
+    const provider = env.OPENROUTER_API_KEY?.trim() ? "OpenRouter" : env.OPENAI_API_KEY?.trim() ? "OpenAI" : null;
+    return json({ calorieGoal: settings?.calorieGoal ?? null, aiReady: Boolean(provider), provider });
   } catch (e) { return failure(e); }
 }
 export async function POST(request: Request) {

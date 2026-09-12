@@ -3,9 +3,11 @@ import { z } from "zod";
 import { AppError, boundedBytes, database } from "./server";
 
 export const MODELS = { photo: "gpt-4.1-mini", text: "gpt-4o-mini", audio: "gpt-4o-mini-transcribe" } as const;
-export function apiKey() {
-  if (!env.OPENAI_API_KEY?.trim()) throw new AppError("AI is not connected yet. Add your API key later; manual logging is ready now.", 503);
-  return env.OPENAI_API_KEY.trim();
+export const ROUTER_MODELS = { photo: "openai/gpt-4.1-mini", text: "openai/gpt-4o-mini", audio: "openai/gpt-4o-mini-transcribe" } as const;
+export function aiProvider(): { kind: "openrouter" | "openai"; key: string } {
+  if (env.OPENROUTER_API_KEY?.trim()) return { kind: "openrouter", key: env.OPENROUTER_API_KEY.trim() };
+  if (env.OPENAI_API_KEY?.trim()) return { kind: "openai", key: env.OPENAI_API_KEY.trim() };
+  throw new AppError("AI is not connected yet. Manual logging is ready now.", 503);
 }
 export async function reserveCall(user: string) {
   const row = await database().prepare(`INSERT INTO ai_usage (user_id, date, calls) VALUES (?, ?, 1)
@@ -14,13 +16,19 @@ export async function reserveCall(user: string) {
   if (!row) throw new AppError("Daily AI limit reached (50 requests). Manual logging is still available. The limit resets at midnight UTC.", 429);
 }
 export async function openai(path: "responses" | "audio/transcriptions", body: string | FormData, key: string) {
+  return aiRequest("https://api.openai.com/v1/" + path, body, key);
+}
+export async function openrouter(path: "chat/completions" | "audio/transcriptions", body: string, key: string) {
+  return aiRequest("https://openrouter.ai/api/v1/" + path, body, key);
+}
+async function aiRequest(url: string, body: string | FormData, key: string) {
   try {
-    const response = await fetch("https://api.openai.com/v1/" + path, {
+    const response = await fetch(url, {
       method: "POST", headers: { Authorization: "Bearer " + key, ...(typeof body === "string" ? { "Content-Type": "application/json" } : {}) },
       body, signal: AbortSignal.timeout(45_000),
     });
     if (!response.ok) {
-      console.error("my-cal AI request failed", { status: response.status, requestId: response.headers.get("x-request-id") });
+      console.error("My Diet AI request failed", { status: response.status, requestId: response.headers.get("x-request-id") });
       await response.body?.cancel();
       if (response.status === 401 || response.status === 403) throw new AppError("The AI key needs attention. Check its permissions or replace it.", 503);
       if (response.status === 429) throw new AppError("The AI provider’s usage or billing limit was reached. Please try later or check your API account.", 429);
@@ -63,6 +71,17 @@ export function parseEstimate(raw: unknown) {
   const output = content.filter(c => c.type === "output_text").map(c => c.text ?? "").join("");
   let parsed: unknown;
   try { parsed = JSON.parse(output); } catch { throw new AppError("AI returned an unreadable estimate. Please try again.", 502); }
+  const estimate = estimateSchema.safeParse(parsed);
+  if (!estimate.success || (estimate.data.status === "ready" && (estimate.data.calories === null || !estimate.data.title.trim()))) throw new AppError("AI returned an incomplete estimate. Please add more details.", 502);
+  return estimate.data;
+}
+export function parseRouterEstimate(raw: unknown) {
+  const response = z.object({ choices: z.array(z.object({ message: z.object({ content: z.string().nullable(), refusal: z.string().nullable().optional() }) })).min(1) }).safeParse(raw);
+  if (!response.success) throw new AppError("The estimate was incomplete. Please try again.", 502);
+  const answer = response.data.choices[0].message;
+  if (answer.refusal) throw new AppError("AI couldn’t estimate this meal. Try another description or log it manually.", 422);
+  let parsed: unknown;
+  try { parsed = JSON.parse(answer.content ?? ""); } catch { throw new AppError("AI returned an unreadable estimate. Please try again.", 502); }
   const estimate = estimateSchema.safeParse(parsed);
   if (!estimate.success || (estimate.data.status === "ready" && (estimate.data.calories === null || !estimate.data.title.trim()))) throw new AppError("AI returned an incomplete estimate. Please add more details.", 502);
   return estimate.data;

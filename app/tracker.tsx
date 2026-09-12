@@ -16,7 +16,7 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { flushSync } from "react-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-type Settings = { calorieGoal: number | null; aiReady: boolean };
+type Settings = { calorieGoal: number | null; aiReady: boolean; provider: string | null };
 type Week = { date: string; calories: number; count: number }[];
 const fmt = (value: number) => Math.round(value).toLocaleString();
 const message = (e: unknown) => e instanceof Error ? e.message : "Something went wrong. Please try again.";
@@ -114,7 +114,7 @@ export default function Tracker() {
     event.preventDefault(); setBusy(true); setFormError("");
     try {
       const data = await api<{ calorieGoal: number | null }>("/api/settings", jsonBody({ calorieGoal: goalInput === "" ? null : Number(goalInput) }));
-      setSettings(s => s ? { ...s, ...data } : { ...data, aiReady: false });
+      setSettings(s => s ? { ...s, ...data } : { ...data, aiReady: false, provider: null });
       setNotice("Daily goal saved.");
     } catch (e) { setFormError(message(e)); } finally { setBusy(false); }
   }
@@ -192,7 +192,7 @@ export default function Tracker() {
       <TabsContent value="settings">
         <section className="settings-intro"><span className="settings-avatar"><BrandLogo size={48} zoom={1.18} /></span><div><h2>My Diet</h2><p>Your personal food journal</p></div><LockKeyhole size={18}/></section>
         <section className="settings-section"><h2>Daily target</h2><form className="settings-card meal-form" onSubmit={saveGoal}><div className="settings-card-title"><Target size={20}/><span>Calorie goal</span></div><div className="goal-input-wrap"><Input aria-label="Daily calorie goal" type="number" min={1} max={20000} step={1} value={goalInput} placeholder="No target" disabled={!settings || busy} onChange={e => { setGoalInput(e.target.value); setNotice(""); }}/><span>kcal / day</span></div><p className="muted text-sm">Use your own target, or leave it empty to just track.</p>{formError && <p role="alert" className="text-destructive">{formError}</p>}{notice && <p role="status" className="saved-note">{notice}</p>}<Button disabled={busy || !settings}>{busy ? "Saving…" : "Save goal"}</Button></form></section>
-        <section className="settings-section"><h2>Meal recognition</h2><div className="settings-card"><div className="settings-card-title"><Flame size={20}/><span>AI estimates</span><span className="connection-badge">{settings === null ? "Loading" : settings.aiReady ? "Connected" : "Not connected"}</span></div><p>{settings?.aiReady ? "Photos, text, and voice are ready. Review your estimate before saving." : "Connect your API key later for automatic estimates. Photos and manual logging work now."}</p></div></section>
+        <section className="settings-section"><h2>Meal recognition</h2><div className="settings-card"><div className="settings-card-title"><Flame size={20}/><span>AI estimates</span><span className="connection-badge">{settings === null ? "Loading" : settings.aiReady ? settings.provider + " connected" : "Not connected"}</span></div><p>{settings?.aiReady ? "Photos, text, and voice are ready. Review your estimate before saving." : "Add an OpenRouter API key as a private Site secret for automatic estimates. Photos and manual logging work now."}</p></div></section>
         <section className="settings-section"><h2>Your journal</h2><div className="settings-card"><div className="settings-card-title"><LockKeyhole size={20}/><span>Private, just for you</span></div><p>Meals and photos are saved to your private Site and available when you sign in.</p><a className="settings-gallery" href="/gallery">Image gallery <ArrowRight size={17}/></a></div></section>
         <p className="settings-footer">My Diet</p>
       </TabsContent>

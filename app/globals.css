@@ -133,6 +133,7 @@ body {
 .summary-label { font-size:14px; margin:0 0 8px; color:var(--muted-foreground); font-weight:500; }
 .summary-foot { font-size:13px; color:var(--muted-foreground); margin-top:6px; }
 .summary-over { font-size:13px; color:#c2410c; margin-top:12px; font-weight:550; }
+.empty-day-note { display:inline-block; margin-top:14px; color:var(--muted-foreground); font-size:13px; }
 .goal-link { font-size:13px; color:var(--kiwi-deep); text-decoration:underline; text-underline-offset:3px; margin-top:8px; }
 .on-track { display:inline-flex; align-items:center; gap:6px; margin-top:14px; color:var(--kiwi-deep); font-size:13px; font-weight:550; }
 .on-track svg { width:14px; height:14px; color:var(--kiwi); }

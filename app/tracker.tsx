@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, Flame, Plus, Settings, LockKeyhole, Utensils, Trash2, LoaderCircle, Target, House, ChartNoAxesColumn, Beef, Wheat, Droplet, CalendarDays, User, Check, ChevronRight } from "lucide-react";
+import { ArrowLeft, ArrowRight, Flame, Plus, Settings, LockKeyhole, Utensils, Trash2, LoaderCircle, Target, House, ChartNoAxesColumn, Beef, Wheat, Droplet, CalendarDays, User, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -24,6 +24,7 @@ export default function Tracker() {
   const [date, setDate] = useState("");
   const [meals, setMeals] = useState<Meal[]>([]);
   const [week, setWeek] = useState<Week>([]);
+  const [streak, setStreak] = useState(0);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -49,9 +50,9 @@ export default function Tracker() {
     const id = ++requestId.current;
     setLoading(true);
     try {
-      const data = await api<{ meals: Meal[]; week: Week }>("/api/meals?date=" + day);
-      if (id === requestId.current) { setMeals(data.meals); setWeek(data.week); setError(""); }
-    } catch (e) { if (id === requestId.current) { setMeals([]); setWeek([]); setError(message(e)); } }
+      const data = await api<{ meals: Meal[]; week: Week; streak: number }>("/api/meals?date=" + day + "&today=" + localDate());
+      if (id === requestId.current) { setMeals(data.meals); setWeek(data.week); setStreak(data.streak); setError(""); }
+    } catch (e) { if (id === requestId.current) { setMeals([]); setWeek([]); setStreak(0); setError(message(e)); } }
     finally { if (id === requestId.current) setLoading(false); }
   }, []);
   useEffect(() => { setDate(localDate()); }, []);
@@ -119,15 +120,14 @@ export default function Tracker() {
   const calendarStart = date ? shiftDate(date, -new Date(date + "T12:00:00").getDay()) : "";
   const unavailable = loading || Boolean(error);
   const remaining = goal ? Math.max(0, goal - totals.calories) : totals.calories;
-  const remainingShare = goal ? Math.max(0, 1 - totals.calories / goal) : 0;
-  const remainingPct = goal ? Math.round(remainingShare * 100) : null;
+  const loggedShare = goal ? totals.calories / goal : 0;
+  const loggedPct = goal ? Math.round(loggedShare * 100) : null;
   const overGoal = Boolean(goal && totals.calories > goal && !unavailable);
-  const onTrack = Boolean(goal && !unavailable && totals.calories <= goal);
   return <main className="cal-shell">
     <header className="cal-header">
       <h1 className="cal-brand">{view === "home" ? <><BrandLogo size={30} zoom={1.18} />My Diet</> : view === "progress" ? "Progress" : "Settings"}</h1>
       <div className="header-actions">
-        <span className="meal-count-badge" title="Meals logged on this day"><Flame size={17} fill="#ffb05c" stroke="#e77826" /><span>{unavailable ? "—" : meals.length}</span><span className="sr-only"> meals logged</span></span>
+        <span className="meal-count-badge" title="Consecutive days with a meal logged, including today or yesterday"><Flame size={17} fill="#ffb05c" stroke="#e77826" /><span>{unavailable ? "—" : streak}</span><span className="sr-only"> day logging streak</span></span>
         <button className="profile-chip" aria-label="Open settings" onClick={openSettings}><User size={18}/></button>
       </div>
     </header>
@@ -146,12 +146,12 @@ export default function Tracker() {
               <p className="summary-label">{goal ? "Calories left" : "Calories logged"}</p>
               <div className="calorie-number">{unavailable ? "—" : fmt(remaining)}</div>
               {goal ? <p className="summary-foot">of {fmt(goal)} calories</p> : <button className="goal-link" onClick={openSettings}>Set daily goal</button>}
-              {onTrack && <span className="on-track"><Check size={14} strokeWidth={2.5}/> You’re on track</span>}
+              {!unavailable && meals.length === 0 && <span className="empty-day-note">No meals logged yet</span>}
               {overGoal && <p className="summary-over">{fmt(totals.calories - (goal || 0))} over your goal</p>}
             </div>
             <div className="calorie-visual">
-              <NutritionRing progress={unavailable || !goal ? 0 : remainingShare} className="calorie-ring"><Flame size={20} /></NutritionRing>
-              {goal && !unavailable && <p className="ring-caption">{overGoal ? "Over goal" : remainingPct + "% left"}</p>}
+              <NutritionRing progress={unavailable || !goal ? 0 : loggedShare} className="calorie-ring"><Flame size={20} /></NutritionRing>
+              {goal && !unavailable && <p className="ring-caption">{overGoal ? "Over goal" : loggedPct + "% logged"}</p>}
             </div>
           </div>
           <div className="macro-cards">

@@ -17,6 +17,13 @@ export function localDate(d = new Date()) {
 export function shiftDate(date: string, days: number) {
   const d = new Date(date + "T12:00:00"); d.setDate(d.getDate() + days); return localDate(d);
 }
+export function currentStreak(loggedDays: string[], today: string) {
+  const days = new Set(loggedDays);
+  let day = days.has(today) ? today : shiftDate(today, -1);
+  let count = 0;
+  while (days.has(day)) { count++; day = shiftDate(day, -1); }
+  return count;
+}
 export function emptyMeal(date: string): Meal {
   const h = new Date().getHours();
   return { id: crypto.randomUUID(), date, mealType: h < 11 ? "Breakfast" : h < 16 ? "Lunch" : "Dinner", title: "", portion: "", calories: 0, protein: null, carbs: null, fat: null, notes: "", source: "manual", imageKey: null };

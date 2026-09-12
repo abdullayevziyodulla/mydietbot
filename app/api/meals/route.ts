@@ -1,14 +1,18 @@
-import { dateSchema, mealSchema, shiftDate } from "@/lib/meals";
+import { currentStreak, dateSchema, mealSchema, shiftDate } from "@/lib/meals";
 import { AppError, database, failure, identify, json, ownedPhoto, readJson } from "@/lib/server";
 export async function GET(request: Request) {
   try {
     const user = await identify(request);
-    const date = dateSchema.parse(new URL(request.url).searchParams.get("date")); const db = database();
-    const [meals, week] = await db.batch([
+    const params = new URL(request.url).searchParams;
+    const date = dateSchema.parse(params.get("date"));
+    const today = dateSchema.parse(params.get("today"));
+    const db = database();
+    const [meals, week, loggedDays] = await db.batch([
       db.prepare("SELECT id, date, meal_type AS mealType, title, portion, calories, protein, carbs, fat, notes, source, image_key AS imageKey, created_at AS createdAt FROM meals WHERE user_id = ? AND date = ? ORDER BY created_at DESC").bind(user, date),
       db.prepare("SELECT date, SUM(calories) AS calories, COUNT(*) AS count FROM meals WHERE user_id = ? AND date BETWEEN ? AND ? GROUP BY date ORDER BY date").bind(user, shiftDate(date, -6), date),
+      db.prepare("SELECT DISTINCT date FROM meals WHERE user_id = ? AND date <= ? ORDER BY date DESC").bind(user, today),
     ]);
-    return json({ meals: meals.results, week: week.results });
+    return json({ meals: meals.results, week: week.results, streak: currentStreak((loggedDays.results as { date: string }[]).map(row => row.date), today) });
   } catch (e) { return failure(e); }
 }
 export async function POST(request: Request) {

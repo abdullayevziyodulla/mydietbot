@@ -31,8 +31,7 @@ export default function Composer({ date, aiReady, onReview, resetKey, initialPho
     if (initialStarted.current || aiReady === null) return;
     initialStarted.current = true;
     if (initialPhoto) void uploadPhoto(initialPhoto, true);
-    else if (voiceFirst) void startRecording();
-  }, [initialPhoto, voiceFirst, aiReady]);
+  }, [initialPhoto, aiReady]);
   useEffect(() => {
     if (!audio) { setAudioUrl(""); return; }
     const url = URL.createObjectURL(audio); setAudioUrl(url);
@@ -126,7 +125,7 @@ export default function Composer({ date, aiReady, onReview, resetKey, initialPho
     } catch (e) { report(e); } finally { setBusy(""); }
   }
   return <aside className="composer-panel">
-    <p className="eyebrow">MY DIET</p><h2>{initialPhoto ? "Your meal" : "What did you eat?"}</h2><p className="muted">{initialPhoto ? "Add any portions, oils, or sauces." : "Say it or type it. Include portions if you can."}</p>
+    <p className="eyebrow">MY DIET</p><h2>{initialPhoto ? "Your meal" : "What did you eat?"}</h2><p className="muted">{initialPhoto ? "Add any portions, oils, or sauces." : voiceFirst ? "Tap Record when you’re ready, or type your meal." : "Say it or type it. Include portions if you can."}</p>
     <div className={"meal-composer " + (dragging ? "dragging" : "")} onDragOver={e => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={e => { e.preventDefault(); setDragging(false); if (e.dataTransfer.files[0]) void uploadPhoto(e.dataTransfer.files[0]); }}>
       {photo && <div className="attached-photo"><img src={photo.url} alt="Attached meal photo" /><Button size="icon" variant="secondary" aria-label="Detach photo" disabled={locked} onClick={() => setPhoto(null)}><X /></Button></div>}
       <Textarea aria-label="Describe your meal" value={text} maxLength={4000} disabled={locked} placeholder={"e.g. Two eggs, a slice of toast,\nand coffee with milk…"} onChange={e => setText(e.target.value)} onPaste={e => { const file = Array.from(e.clipboardData.items).find(i => i.type.startsWith("image/"))?.getAsFile(); if (file) { e.preventDefault(); void uploadPhoto(file); } }} rows={4} />

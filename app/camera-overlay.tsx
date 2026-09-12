@@ -4,10 +4,10 @@ import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import CameraCapture from "./camera-capture";
 
-export default function CameraOverlay({ onPhoto, onVoice, onManual, onClose }: {
+export default function CameraOverlay({ onPhoto, onVoice, onText, onClose }: {
   onPhoto: (file: File) => void;
   onVoice: () => void;
-  onManual: () => void;
+  onText: () => void;
   onClose: () => void;
 }) {
   const overlay = useRef<HTMLDivElement>(null);
@@ -41,6 +41,6 @@ export default function CameraOverlay({ onPhoto, onVoice, onManual, onClose }: {
   }, []);
 
   return createPortal(<div ref={overlay} className="camera-overlay" role="dialog" aria-modal="true" aria-label="Scan your food">
-    <CameraCapture onPhoto={onPhoto} onVoice={onVoice} onManual={onManual} onClose={onClose} />
+    <CameraCapture onPhoto={onPhoto} onVoice={onVoice} onText={onText} onClose={onClose} />
   </div>, document.body);
 }

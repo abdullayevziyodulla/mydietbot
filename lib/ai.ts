@@ -7,13 +7,13 @@ export const ROUTER_MODELS = { photo: "openai/gpt-4.1-mini", text: "openai/gpt-4
 export function aiProvider(): { kind: "openrouter" | "openai"; key: string } {
   if (env.OPENROUTER_API_KEY?.trim()) return { kind: "openrouter", key: env.OPENROUTER_API_KEY.trim() };
   if (env.OPENAI_API_KEY?.trim()) return { kind: "openai", key: env.OPENAI_API_KEY.trim() };
-  throw new AppError("AI is not connected yet. Manual logging is ready now.", 503);
+  throw new AppError("AI is not connected yet. Connect your OpenRouter key to estimate meals.", 503);
 }
 export async function reserveCall(user: string) {
   const row = await database().prepare(`INSERT INTO ai_usage (user_id, date, calls) VALUES (?, ?, 1)
     ON CONFLICT(user_id, date) DO UPDATE SET calls = calls + 1 WHERE calls < 50 RETURNING calls`)
     .bind(user, new Date().toISOString().slice(0, 10)).first();
-  if (!row) throw new AppError("Daily AI limit reached (50 requests). Manual logging is still available. The limit resets at midnight UTC.", 429);
+  if (!row) throw new AppError("Daily AI limit reached (50 requests). The limit resets at midnight UTC.", 429);
 }
 export async function openai(path: "responses" | "audio/transcriptions", body: string | FormData, key: string) {
   return aiRequest("https://api.openai.com/v1/" + path, body, key);
@@ -67,7 +67,7 @@ export function parseEstimate(raw: unknown) {
   })) }).safeParse(raw);
   if (!response.success || response.data.status !== "completed") throw new AppError("The estimate was incomplete. Please try again.", 502);
   const content = response.data.output.flatMap(o => o.content || []);
-  if (content.some(c => c.type === "refusal")) throw new AppError("AI couldn’t estimate this meal. Try another description or log it manually.", 422);
+  if (content.some(c => c.type === "refusal")) throw new AppError("AI couldn’t estimate this meal. Try another description.", 422);
   const output = content.filter(c => c.type === "output_text").map(c => c.text ?? "").join("");
   let parsed: unknown;
   try { parsed = JSON.parse(output); } catch { throw new AppError("AI returned an unreadable estimate. Please try again.", 502); }
@@ -79,7 +79,7 @@ export function parseRouterEstimate(raw: unknown) {
   const response = z.object({ choices: z.array(z.object({ message: z.object({ content: z.string().nullable(), refusal: z.string().nullable().optional() }) })).min(1) }).safeParse(raw);
   if (!response.success) throw new AppError("The estimate was incomplete. Please try again.", 502);
   const answer = response.data.choices[0].message;
-  if (answer.refusal) throw new AppError("AI couldn’t estimate this meal. Try another description or log it manually.", 422);
+  if (answer.refusal) throw new AppError("AI couldn’t estimate this meal. Try another description.", 422);
   let parsed: unknown;
   try { parsed = JSON.parse(answer.content ?? ""); } catch { throw new AppError("AI returned an unreadable estimate. Please try again.", 502); }
   const estimate = estimateSchema.safeParse(parsed);

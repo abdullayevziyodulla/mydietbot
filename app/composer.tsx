@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { Camera, Mic, Paperclip, Send, Square, X, LoaderCircle, Plus, AudioLines } from "lucide-react";
+import { Camera, Mic, Paperclip, Send, Square, X, LoaderCircle, AudioLines } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { emptyMeal, type Meal } from "@/lib/meals";
@@ -68,7 +68,7 @@ export default function Composer({ date, aiReady, onReview, resetKey, initialPho
       const savedPhoto = await api<{ key: string; url: string }>("/api/photos", { method: "POST", headers: { "Content-Type": blob.type }, body: blob });
       setPhoto(savedPhoto);
       if (autoReview && aiReady) await estimatePhoto(savedPhoto.key);
-      else if (autoReview && aiReady === false) setQuestion("Photo saved. Enter your calories below; AI estimates will be available once your key is connected.");
+      else if (autoReview && aiReady === false) setQuestion("Photo saved. Connect your AI key to estimate this meal.");
     } catch (e) { report(e); } finally { setBusy(""); if (photoInput.current) photoInput.current.value = ""; }
   }
   function chooseAudio(file: File) {
@@ -125,7 +125,7 @@ export default function Composer({ date, aiReady, onReview, resetKey, initialPho
     } catch (e) { report(e); } finally { setBusy(""); }
   }
   return <aside className="composer-panel">
-    <p className="eyebrow">MY DIET</p><h2>{initialPhoto ? "Your meal" : "What did you eat?"}</h2><p className="muted">{initialPhoto ? "Add any portions, oils, or sauces." : voiceFirst ? "Tap Record when you’re ready, or type your meal." : "Say it or type it. Include portions if you can."}</p>
+    <p className="eyebrow">MY DIET</p><h2>{initialPhoto ? "Your meal" : "What did you eat?"}</h2><p className="muted">{initialPhoto ? "Add any portions, oils, or sauces for a better estimate." : voiceFirst ? "Tap Record when you’re ready, or type your meal." : "Describe your meal. We’ll estimate the calories and macros."}</p>
     <div className={"meal-composer " + (dragging ? "dragging" : "")} onDragOver={e => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={e => { e.preventDefault(); setDragging(false); if (e.dataTransfer.files[0]) void uploadPhoto(e.dataTransfer.files[0]); }}>
       {photo && <div className="attached-photo"><img src={photo.url} alt="Attached meal photo" /><Button size="icon" variant="secondary" aria-label="Detach photo" disabled={locked} onClick={() => setPhoto(null)}><X /></Button></div>}
       <Textarea aria-label="Describe your meal" value={text} maxLength={4000} disabled={locked} placeholder={"e.g. Two eggs, a slice of toast,\nand coffee with milk…"} onChange={e => setText(e.target.value)} onPaste={e => { const file = Array.from(e.clipboardData.items).find(i => i.type.startsWith("image/"))?.getAsFile(); if (file) { e.preventDefault(); void uploadPhoto(file); } }} rows={4} />
@@ -142,8 +142,7 @@ export default function Composer({ date, aiReady, onReview, resetKey, initialPho
     {error && <p className="composer-error" role="alert">{error}</p>}
     {question && <p className="question-note" role="status">{question}</p>}
     <Button className="estimate-button w-full" disabled={!aiReady || locked || (!text.trim() && !photo) || !date} onClick={() => void estimate()}>{busy ? <LoaderCircle className="animate-spin" /> : <Send />}{busy || "Estimate meal"}</Button>
-    {aiReady === false ? <p className="connection-note"><strong>API key pending.</strong> Save meals manually now; connect your key later for AI.</p> : aiReady === null ? <p className="connection-note">Checking AI connection…</p> : <p className="connection-note">You review every estimate before it’s logged.</p>}
-    <Button variant="ghost" className="w-full" disabled={locked || !date} onClick={() => onReview({ ...emptyMeal(date), title: text.slice(0, 160), notes: text, imageKey: photo?.key ?? null })}><Plus /> Enter calories manually</Button>
+    {aiReady === false ? <p className="connection-note"><strong>AI is unavailable.</strong> Connect your OpenRouter key to estimate meals.</p> : aiReady === null ? <p className="connection-note">Checking AI connection…</p> : <p className="connection-note">You review every estimate before it’s logged.</p>}
     <div className="photo-tip"><img src="/meal-photo-tip.png" alt="Example of a meal photographed from above with all portions visible" width={76} height={76} /><div><strong>For a better estimate</strong><p>Show the whole plate. Add amounts and any oils or sauces.</p><small>Example photo</small></div></div>
   </aside>;
 }
